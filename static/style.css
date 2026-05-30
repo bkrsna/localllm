@@ -340,6 +340,28 @@ body.dark .custom-modal-input, body.dark .custom-modal-textarea {
 }
 
 /* ========== ENHANCED CODE BLOCK STYLING ========== */
+/* Fallback and Stream-safe Code Block Styling */
+.bubble-ai-style pre {
+    background: #1a1b26 !important; /* Tokyo Night Dark Background */
+    color: #a9b1d6 !important;
+    border-radius: 10px !important;
+    padding: 14px 16px !important;
+    margin: 1em 0 !important;
+    overflow-x: auto !important;
+    border: 1px solid rgba(255, 255, 255, 0.08) !important;
+    box-shadow: inset 0 1px 4px rgba(0, 0, 0, 0.2) !important;
+}
+
+.bubble-ai-style pre code {
+    color: #a9b1d6 !important;
+    background-color: transparent !important;
+    font-family: 'JetBrains Mono', 'Fira Code', 'Cascadia Code', 'SF Mono', 'Consolas', monospace !important;
+    font-size: 13px !important;
+    line-height: 1.65 !important;
+    padding: 0 !important;
+    border: none !important;
+}
+
 .code-block-wrapper {
     position: relative;
     margin: 1em 0;
