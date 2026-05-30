@@ -41,6 +41,8 @@ class ChatMessage(db.Model):
     role = db.Column(db.String(20), nullable=False) # user, assistant
     content = db.Column(db.Text, nullable=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    prompt_tokens = db.Column(db.Integer, nullable=True)
+    eval_tokens = db.Column(db.Integer, nullable=True)
 
     def __init__(self, **kwargs):
         for key, value in kwargs.items():
@@ -49,7 +51,9 @@ class ChatMessage(db.Model):
     def to_dict(self):
         return {
             "role": self.role,
-            "content": self.content
+            "content": self.content,
+            "prompt_tokens": self.prompt_tokens,
+            "eval_tokens": self.eval_tokens
         }
 
 class Persona(db.Model):

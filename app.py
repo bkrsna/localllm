@@ -759,16 +759,10 @@ def chat():
         
         ollama_payload['prompt'] = full_context_prompt
 
-
-
         def generate():
             full_response = ""
-            
-            # Save User Message
-            # We must handle context. For generator, best practice in Flask-SQLAlchemy 3.x+ is explicit context
-            # or pre-generate. But we need streaming.
-            # We'll save AFTER generation or BEFORE? 
-            # Saving BEFORE is safer for chat logs, but let's do it in bulk at end to be simple with context
+            prompt_tokens = 0
+            eval_tokens = 0
             
             try:
                 with requests.post(OLLAMA_API_URL, json=ollama_payload, stream=True, timeout=120) as response:
@@ -782,22 +776,37 @@ def chat():
                                     chunk = json_response['response']
                                     full_response += chunk
                                     yield chunk
+                                
+                                # Extract token usage on completion chunk
+                                if json_response.get('done') is True:
+                                    prompt_tokens = json_response.get('prompt_eval_count', 0)
+                                    eval_tokens = json_response.get('eval_count', 0)
                             except:
                                 pass
                 
-                # Update DB with full conversation pair
+                # Yield the token usage information at the very end of the stream
+                if prompt_tokens > 0 or eval_tokens > 0:
+                    yield f"\n\n[TOKEN_USAGE:prompt_tokens={prompt_tokens},eval_tokens={eval_tokens}]"
+                
+                # Update DB with full conversation pair and token counts
                 with app.app_context():
                      # Save user message
                      user_msg = ChatMessage(session_id=session_id, role="user", content=user_prompt)
                      db.session.add(user_msg)
                      # Save assistant message
-                     asst_msg = ChatMessage(session_id=session_id, role="assistant", content=full_response)
+                     asst_msg = ChatMessage(
+                         session_id=session_id, 
+                         role="assistant", 
+                         content=full_response, 
+                         prompt_tokens=prompt_tokens, 
+                         eval_tokens=eval_tokens
+                     )
                      db.session.add(asst_msg)
                      db.session.commit()
                     
             except Exception as e:
                 yield f"\n[Error: {str(e)}]"
-
+        
         return Response(stream_with_context(generate()), mimetype='text/plain', headers={"X-Session-ID": session_id})
 
     except Exception as e:
@@ -805,48 +814,65 @@ def chat():
 
 def seed_personas():
     try:
-        if Persona.query.filter_by(is_system=True).count() == 0:
-            default_presets = [
-                Persona(
-                    name="General Assistant",
-                    system_prompt="You are a helpful, friendly, and knowledgeable AI assistant.",
-                    icon="sparkles",
-                    is_system=True
-                ),
-                Persona(
-                    name="Expert Software Engineer",
-                    system_prompt="You are an expert software engineer. Provide high-quality, secure, efficient, and well-commented code. Explain your decisions clearly and structure your answers with precise formatting.",
-                    icon="code",
-                    is_system=True
-                ),
-                Persona(
-                    name="Scientific Researcher",
-                    system_prompt="You are an expert scientific researcher. Analyze topics with academic rigor, provide balanced and objective perspectives, refer to methods or frameworks where applicable, and maintain a highly formal tone.",
-                    icon="microscope",
-                    is_system=True
-                ),
-                Persona(
-                    name="Copywriter / Editor",
-                    system_prompt="You are an expert copywriter and editor. Refine text to make it engaging, polished, and grammatically flawless while keeping the original intent. Offer clear improvement suggestions.",
-                    icon="pen-tool",
-                    is_system=True
-                ),
-                Persona(
-                    name="Concise Summarizer",
-                    system_prompt="You are an expert summarizer. Extract the core arguments, actionable items, and key takeaways from inputs, presenting them in a highly structured, bulleted format. Avoid fluff.",
-                    icon="align-left",
-                    is_system=True
-                )
-            ]
-            db.session.bulk_save_objects(default_presets)
-            db.session.commit()
-            print("Successfully seeded system personas!")
+        default_presets = [
+            Persona(
+                name="General Assistant",
+                system_prompt="You are a helpful, friendly, and highly intelligent general assistant. You provide clear, accurate, and context-aware responses with excellent structure. Balance completeness and conciseness, use clear formatting (bolding, lists) to emphasize key details, and adapt your tone to be professional yet warm.",
+                icon="sparkles",
+                is_system=True
+            ),
+            Persona(
+                name="Expert Software Engineer",
+                system_prompt="You are an elite, highly experienced Senior Software Engineer and Architect. You provide exceptionally clean, secure, performant, and well-commented code following the industry's best practices (SOLID principles, DRY, modular design). Always explain your architectural and implementation decisions, point out potential edge cases, write comprehensive docstrings and comments, and present code inside nicely formatted markdown code blocks.",
+                icon="code",
+                is_system=True
+            ),
+            Persona(
+                name="Scientific Researcher",
+                system_prompt="You are a distinguished scientific researcher and academic writer. You analyze queries with rigorous critical thinking, scientific objectivity, and academic precision. Formulate balanced, data-driven, and objective explanations. Reference established theoretical frameworks, research methods, and mathematical expressions where appropriate. Maintain a formal, authoritative, and objective scientific tone.",
+                icon="microscope",
+                is_system=True
+            ),
+            Persona(
+                name="Copywriter / Editor",
+                system_prompt="You are an expert copywriter, creative content strategist, and meticulously detail-oriented editor. You refine text to make it exceptionally engaging, persuasive, clear, and grammatically flawless, maintaining the author's original voice while elevating the impact. Suggest structural and stylistic enhancements, and provide alternative headline or phrasing choices to maximize audience engagement.",
+                icon="pen-tool",
+                is_system=True
+            ),
+            Persona(
+                name="Concise Summarizer",
+                system_prompt="You are an expert executive summarizer and data synthesist. You distill complex, dense inputs into their absolute core ideas, key arguments, logical takeaways, and actionable bullet-point steps. Structure your summaries with clear markdown headers, bold vital terms, eliminate all conversational filler, fluff, or preambles, and present information in a high-density, scannable format.",
+                icon="align-left",
+                is_system=True
+            )
+        ]
+        
+        # Upgrades seeded system personas prompts dynamically on start if already exist
+        for preset in default_presets:
+            existing = Persona.query.filter_by(name=preset.name, is_system=True).first()
+            if existing:
+                existing.system_prompt = preset.system_prompt
+                existing.icon = preset.icon
+            else:
+                db.session.add(preset)
+        
+        db.session.commit()
+        print("Successfully seeded/updated system personas!")
     except Exception as e:
         print(f"Error seeding personas: {e}")
 
 if __name__ == '__main__':
     with app.app_context():
-        db.create_all() # Re-create tables (will handle new schema if DB file deleted)
+        # Automated Schema Migration for local SQLite DB schema upgrades
+        try:
+            db.session.execute(db.text("ALTER TABLE chat_message ADD COLUMN prompt_tokens INTEGER"))
+            db.session.execute(db.text("ALTER TABLE chat_message ADD COLUMN eval_tokens INTEGER"))
+            db.session.commit()
+            print("Successfully migrated local SQLite DB schema for token usage tracking!")
+        except Exception:
+            db.session.rollback() # Columns already exist, skip migration
+            
+        db.create_all() # Re-create tables if DB file deleted
         seed_personas()
     app.run(host='0.0.0.0', port=5000, debug=True)
 

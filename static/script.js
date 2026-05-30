@@ -983,7 +983,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
             if (data.messages) {
                 data.messages.forEach(msg => {
-                    appendMessage(msg.role, msg.content);
+                    appendMessage(msg.role, msg.content, msg.prompt_tokens, msg.eval_tokens);
                 });
             }
             
@@ -1026,7 +1026,7 @@ document.addEventListener('DOMContentLoaded', () => {
         bottomAnchor?.scrollIntoView({ behavior: 'smooth' });
     }
 
-    function appendMessage(role, content) {
+    function appendMessage(role, content, promptTokens = null, evalTokens = null) {
         const div = document.createElement('div');
         div.className = `flex w-full group py-2 animate-slide-up ${role === 'user' ? 'justify-end' : 'justify-start'}`;
 
@@ -1034,11 +1034,11 @@ document.addEventListener('DOMContentLoaded', () => {
         const parsedContent = isUser ? content : marked.parse(content);
 
         div.innerHTML = `
-            <div class="flex max-w-[75%] md:max-w-[70%] gap-2.5 ${isUser ? 'flex-row-reverse' : 'flex-row'}">
+            <div class="flex max-w-[75%] md:max-w-[70%] gap-2.5 ${isUser ? 'flex-row-reverse' : 'flex-row'} w-full">
                 <div class="flex-shrink-0 w-7 h-7 rounded-full flex items-center justify-center ${isUser ? 'bg-gradient-to-br from-blue-500 to-blue-600 text-white' : 'bg-gradient-to-br from-purple-500 to-purple-600 text-white'} text-xs font-semibold mt-1 shadow">
                     ${isUser ? 'U' : 'AI'}
                 </div>
-                <div class="flex flex-col ${isUser ? 'items-end' : 'items-start'} min-w-0">
+                <div class="flex flex-col ${isUser ? 'items-end' : 'items-start'} min-w-0 w-full">
                      <div class="px-4 py-3 rounded-2xl text-[14.5px] leading-relaxed break-words max-w-full
                         ${isUser
                             ? 'bubble-user-style'
@@ -1047,16 +1047,21 @@ document.addEventListener('DOMContentLoaded', () => {
                         ${isUser ? content : parsedContent}
                      </div>
                      ${!isUser ? `
-                     <div class="flex items-center gap-1.5 mt-1.5 select-none opacity-0 group-hover:opacity-100 transition-opacity duration-200">
-                         <button class="tts-btn p-1 text-[var(--text-muted)] hover:text-[var(--text-main)] hover:bg-gray-200/50 rounded transition-colors" title="Read Aloud">
-                             <i data-lucide="volume-2" width="13"></i>
-                         </button>
-                         <button class="copy-resp-btn p-1 text-[var(--text-muted)] hover:text-[var(--text-main)] hover:bg-gray-200/50 rounded transition-colors" title="Copy Response">
-                             <i data-lucide="copy" width="13"></i>
-                         </button>
-                         <button class="download-resp-btn p-1 text-[var(--text-muted)] hover:text-[var(--text-main)] hover:bg-gray-200/50 rounded transition-colors" title="Download Response (.md)">
-                             <i data-lucide="download" width="13"></i>
-                         </button>
+                     <div class="flex items-center justify-between w-full mt-1.5 select-none">
+                         <div class="flex items-center gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
+                             <button class="tts-btn p-1 text-[var(--text-muted)] hover:text-[var(--text-main)] hover:bg-gray-200/50 rounded transition-colors" title="Read Aloud">
+                                 <i data-lucide="volume-2" width="13"></i>
+                             </button>
+                             <button class="copy-resp-btn p-1 text-[var(--text-muted)] hover:text-[var(--text-main)] hover:bg-gray-200/50 rounded transition-colors" title="Copy Response">
+                                 <i data-lucide="copy" width="13"></i>
+                             </button>
+                             <button class="download-resp-btn p-1 text-[var(--text-muted)] hover:text-[var(--text-main)] hover:bg-gray-200/50 rounded transition-colors" title="Download Response (.md)">
+                                 <i data-lucide="download" width="13"></i>
+                             </button>
+                         </div>
+                         <div class="token-usage-badge hidden flex items-center text-[10px] text-[var(--text-muted)] font-medium px-2.5 py-0.5 bg-[var(--border-color)]/30 rounded-full border border-[var(--border-color)]/25 select-none transition-all duration-300">
+                             <!-- CPU stats will be injected dynamically -->
+                         </div>
                      </div>
                      ` : ''}
                 </div>
@@ -1114,6 +1119,16 @@ document.addEventListener('DOMContentLoaded', () => {
                         showToast('Failed to download response', 'error');
                     }
                 };
+            }
+
+            // Render token usage if passed (e.g. from history load)
+            if (promptTokens !== null && evalTokens !== null && (promptTokens > 0 || evalTokens > 0)) {
+                const badge = div.querySelector('.token-usage-badge');
+                if (badge) {
+                    badge.innerHTML = `<i data-lucide="cpu" width="10" class="mr-1 inline-block text-[var(--accent-color)]"></i> ${promptTokens} p | ${evalTokens} g`;
+                    badge.classList.remove('hidden');
+                    lucide.createIcons();
+                }
             }
         }
 
@@ -1207,6 +1222,9 @@ document.addEventListener('DOMContentLoaded', () => {
             const reader = res.body.getReader();
             const decoder = new TextDecoder();
 
+            let pTokens = null;
+            let gTokens = null;
+
             while (true) {
                 // Check scroll position BEFORE updating content
                 const isAtBottom = chatContainer.scrollHeight - chatContainer.scrollTop - chatContainer.clientHeight < 120;
@@ -1217,8 +1235,17 @@ document.addEventListener('DOMContentLoaded', () => {
                 aiFullText += chunk;
 
                 if (aiContentContainer) {
+                    // Check if the stream contains the token usage signature
+                    const tokenMatch = aiFullText.match(/\[TOKEN_USAGE:prompt_tokens=(\d+),eval_tokens=(\d+)\]/);
+                    let textToRender = aiFullText;
+                    if (tokenMatch) {
+                        pTokens = parseInt(tokenMatch[1]);
+                        gTokens = parseInt(tokenMatch[2]);
+                        textToRender = aiFullText.replace(/\[TOKEN_USAGE:prompt_tokens=\d+,eval_tokens=\d+\]/, '').trim();
+                    }
+
                     // Update content dynamically injecting vertical pulsing line cursor indicator at the end
-                    aiContentContainer.innerHTML = marked.parse(aiFullText) + '<span class="typing-cursor"></span>';
+                    aiContentContainer.innerHTML = marked.parse(textToRender) + (tokenMatch ? '' : '<span class="typing-cursor"></span>');
                 }
 
                 // Smart auto-scroll only if user is at the bottom
@@ -1227,23 +1254,41 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
             }
 
-            // Remove cursor line and decorate code blocks
+            // Remove cursor line, extract token info if present, and decorate code blocks
+            let cleanResponseText = aiFullText;
+            const finalTokenMatch = aiFullText.match(/\[TOKEN_USAGE:prompt_tokens=(\d+),eval_tokens=(\d+)\]/);
+            if (finalTokenMatch) {
+                pTokens = parseInt(finalTokenMatch[1]);
+                gTokens = parseInt(finalTokenMatch[2]);
+                cleanResponseText = aiFullText.replace(/\[TOKEN_USAGE:prompt_tokens=\d+,eval_tokens=\d+\]/, '').trim();
+            }
+
             if (aiContentContainer) {
-                aiContentContainer.innerHTML = marked.parse(aiFullText);
+                aiContentContainer.innerHTML = marked.parse(cleanResponseText);
                 decorateCodeBlocks(aiMsgDiv);
+            }
+
+            // Render token usage badge if counts are parsed
+            if (pTokens !== null && gTokens !== null) {
+                const badge = aiMsgDiv.querySelector('.token-usage-badge');
+                if (badge) {
+                    badge.innerHTML = `<i data-lucide="cpu" width="10" class="mr-1 inline-block text-[var(--accent-color)]"></i> ${pTokens} p | ${gTokens} g`;
+                    badge.classList.remove('hidden');
+                    lucide.createIcons();
+                }
             }
 
             // Bind click handlers with complete text once generation completes
             const freshTtsBtn = aiMsgDiv.querySelector('.tts-btn');
             if (freshTtsBtn) {
-                freshTtsBtn.onclick = () => toggleTTS(aiFullText, freshTtsBtn);
+                freshTtsBtn.onclick = () => toggleTTS(cleanResponseText, freshTtsBtn);
             }
 
             const freshCopyBtn = aiMsgDiv.querySelector('.copy-resp-btn');
             if (freshCopyBtn) {
                 freshCopyBtn.onclick = async () => {
                     try {
-                        await navigator.clipboard.writeText(aiFullText);
+                        await navigator.clipboard.writeText(cleanResponseText);
                         freshCopyBtn.innerHTML = `<i data-lucide="check" width="13" class="text-emerald-500"></i>`;
                         lucide.createIcons();
                         showToast('Response copied to clipboard!', 'success');
@@ -1262,7 +1307,7 @@ document.addEventListener('DOMContentLoaded', () => {
             if (freshDownloadBtn) {
                 freshDownloadBtn.onclick = () => {
                     try {
-                        const blob = new Blob([aiFullText], { type: 'text/markdown;charset=utf-8;' });
+                        const blob = new Blob([cleanResponseText], { type: 'text/markdown;charset=utf-8;' });
                         const url = URL.createObjectURL(blob);
                         const a = document.createElement('a');
                         a.href = url;
