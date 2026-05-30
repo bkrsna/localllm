@@ -1,0 +1,23 @@
+# Environments
+venv/
+ENV/
+env/
+.env
+
+# Python Cache
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Local Database & Cache Data
+*.db
+*.sqlite3
+chat.db
+
+# Local Conversation Exports
+chat_history.json
+chat_history_sessions.json
+
+# Logs
+*.log

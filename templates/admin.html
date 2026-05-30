@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin - Privacy LLM</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+        }
+    </style>
+</head>
+
+<body class="bg-gray-50 text-gray-900 min-h-screen">
+
+    <nav class="bg-white border-b border-gray-200 px-6 py-4 flex items-center justify-between">
+        <div class="font-bold text-xl flex items-center gap-2">
+            <i data-lucide="shield" class="text-blue-600"></i>
+            Privacy LLM Admin
+        </div>
+        <div class="flex items-center gap-4">
+            <a href="{{ url_for('chat_interface') }}" class="text-sm font-medium text-gray-500 hover:text-black">Back to
+                Chat</a>
+            <a href="{{ url_for('logout') }}" class="text-sm font-medium text-red-500 hover:text-red-700">Logout</a>
+        </div>
+    </nav>
+
+    <main class="max-w-6xl mx-auto px-6 py-8">
+
+        <header class="mb-8">
+            <h1 class="text-2xl font-bold mb-2">Dashboard</h1>
+            <p class="text-gray-500">Overview of system usage and users.</p>
+        </header>
+
+        <!-- Stats Cards -->
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+            <div class="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
+                <div class="flex items-center justify-between mb-4">
+                    <h3 class="text-gray-500 text-sm font-medium uppercase tracking-wide">Total Users</h3>
+                    <i data-lucide="users" class="text-blue-500" width="20"></i>
+                </div>
+                <div class="text-3xl font-bold">{{ users|length }}</div>
+            </div>
+
+            <div class="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
+                <div class="flex items-center justify-between mb-4">
+                    <h3 class="text-gray-500 text-sm font-medium uppercase tracking-wide">Total Sessions</h3>
+                    <i data-lucide="message-square" class="text-green-500" width="20"></i>
+                </div>
+                <div class="text-3xl font-bold">{{ stats.total_sessions }}</div>
+                <div class="text-xs text-gray-400 mt-1">Includes {{ stats.guest_sessions }} guest sessions</div>
+            </div>
+
+            <div class="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
+                <div class="flex items-center justify-between mb-4">
+                    <h3 class="text-gray-500 text-sm font-medium uppercase tracking-wide">Total Messages</h3>
+                    <i data-lucide="activity" class="text-purple-500" width="20"></i>
+                </div>
+                <div class="text-3xl font-bold">{{ stats.total_messages }}</div>
+            </div>
+        </div>
+
+        <!-- Users Table -->
+        <div class="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+            <div class="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
+                <h2 class="font-semibold text-lg">Registered Users</h2>
+            </div>
+            <div class="overflow-x-auto">
+                <table class="w-full text-left text-sm">
+                    <thead>
+                        <tr class="bg-gray-50 border-b border-gray-100">
+                            <th class="px-6 py-3 font-medium text-gray-500">Username</th>
+                            <th class="px-6 py-3 font-medium text-gray-500">Role</th>
+                            <th class="px-6 py-3 font-medium text-gray-500 text-center">Sessions</th>
+                            <th class="px-6 py-3 font-medium text-gray-500 text-center">Messages</th>
+                            <th class="px-6 py-3 font-medium text-gray-500 text-right">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-gray-100">
+                        {% for user in users %}
+                        <tr class="hover:bg-gray-50 transition-colors">
+                            <td class="px-6 py-4 font-medium text-gray-900">
+                                <div class="flex items-center gap-3">
+                                    <div
+                                        class="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center text-gray-500 font-bold text-xs">
+                                        {{ user.username[0]|upper }}
+                                    </div>
+                                    {{ user.username }}
+                                </div>
+                            </td>
+                            <td class="px-6 py-4">
+                                {% if user.is_admin %}
+                                <span
+                                    class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                                    Admin
+                                </span>
+                                {% else %}
+                                <span
+                                    class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800">
+                                    User
+                                </span>
+                                {% endif %}
+                            </td>
+                            <td class="px-6 py-4 text-center text-gray-600">{{ user.session_count }}</td>
+                            <td class="px-6 py-4 text-center text-gray-600">{{ user.message_count }}</td>
+                            <td class="px-6 py-4 text-right">
+                                <button class="text-gray-400 hover:text-gray-600">
+                                    <i data-lucide="more-horizontal" width="16"></i>
+                                </button>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+    </main>
+
+    <script>
+        lucide.createIcons();
+    </script>
+</body>
+
+</html>

@@ -1,0 +1,9 @@
+Flask==3.0.0
+requests==2.31.0
+flask-cors
+flask-sqlalchemy
+flask-login
+pypdf
+python-docx
+fpdf2
+

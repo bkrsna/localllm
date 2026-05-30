@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Privacy LLM</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+        }
+    </style>
+</head>
+
+<body class="bg-black text-white h-screen flex flex-col">
+
+    <!-- Navbar -->
+    <nav class="flex items-center justify-between px-6 py-4 border-b border-white/10">
+        <div class="text-xl font-bold tracking-tight">Privacy LLM</div>
+        <div class="flex items-center gap-4">
+            {% if current_user.is_authenticated %}
+            <span class="text-gray-400 text-sm">Hello, {{ current_user.username }}</span>
+            <a href="{{ url_for('chat_interface') }}" class="text-sm hover:text-white transition-colors">Go to Chat</a>
+            <a href="{{ url_for('logout') }}"
+                class="text-sm bg-white/10 hover:bg-white/20 px-3 py-1.5 rounded-full transition-all">Logout</a>
+            {% else %}
+            <a href="{{ url_for('login') }}" class="text-sm hover:text-white transition-colors text-gray-300">Log in</a>
+            <a href="{{ url_for('signup') }}"
+                class="text-sm bg-white text-black hover:bg-gray-200 px-3 py-1.5 rounded-full font-medium transition-all">Sign
+                up</a>
+            {% endif %}
+        </div>
+    </nav>
+
+    <!-- Hero Section -->
+    <main class="flex-1 flex flex-col items-center justify-center text-center px-4">
+        <div class="max-w-3xl space-y-8">
+            <h1
+                class="text-5xl md:text-7xl font-bold tracking-tighter bg-gradient-to-br from-white to-gray-500 bg-clip-text text-transparent pb-2">
+                Your Personal AI Assistant
+            </h1>
+            <p class="text-xl text-gray-400 max-w-2xl mx-auto leading-relaxed">
+                Experience the power of local LLMs with a beautiful, private, and secure interface. No cloud
+                dependencies, just pure intelligence.
+            </p>
+
+            <div class="flex flex-col sm:flex-row items-center justify-center gap-4 pt-4">
+                <a href="{{ url_for('chat_interface') }}"
+                    class="group relative inline-flex items-center justify-center px-8 py-3.5 text-lg font-semibold text-black bg-white rounded-full overflow-hidden transition-all hover:scale-105 hover:shadow-[0_0_40px_-10px_rgba(255,255,255,0.3)]">
+                    <span class="relative z-10 flex items-center gap-2">
+                        Start Chatting
+                        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none"
+                            stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+                            class="transition-transform group-hover:translate-x-1">
+                            <path d="M5 12h14" />
+                            <path d="m12 5 7 7-7 7" />
+                        </svg>
+                    </span>
+                </a>
+                {% if not current_user.is_authenticated %}
+                <a href="{{ url_for('signup') }}"
+                    class="px-8 py-3.5 text-lg font-medium text-white border border-white/20 rounded-full hover:bg-white/5 transition-all">
+                    Create Account
+                </a>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- decorative elements -->
+        <div
+            class="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 -z-10 w-[800px] h-[800px] bg-purple-500/20 blur-[120px] rounded-full opacity-30 pointer-events-none">
+        </div>
+    </main>
+
+    <footer class="py-6 text-center text-gray-600 text-sm">
+        &copy; 2025 Privacy LLM. Local execution.
+    </footer>
+
+</body>
+
+</html>

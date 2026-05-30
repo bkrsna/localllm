@@ -1,0 +1,448 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Privacy LLM</title>
+
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com?plugins=typography"></script>
+
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+
+    <!-- Markdown & Syntax Highlighting -->
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/tokyo-night-dark.min.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+
+    <!-- Code Font -->
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+
+    <!-- Custom Styles -->
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                    }
+                }
+            }
+        }
+    </script>
+    <!-- Inter Font -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+        }
+
+        /* Scrollbar hiding */
+        .scrollbar-hide::-webkit-scrollbar {
+            display: none;
+        }
+
+        .scrollbar-hide {
+            -ms-overflow-style: none;
+            scrollbar-width: none;
+        }
+    </style>
+</head>
+
+<body class="bg-[var(--bg-app)] text-[var(--text-main)] h-dvh flex overflow-hidden transition-all duration-300">
+
+    <!-- Sidebar -->
+    <div id="sidebar"
+        class="fixed inset-y-0 left-0 z-50 w-[280px] bg-[var(--bg-sidebar)] text-[var(--text-sidebar)] transform transition-transform duration-300 ease-in-out md:relative md:translate-x-0 flex flex-col border-r border-[var(--border-color)] shadow-xl md:shadow-none min-h-0 transition-all duration-300">
+
+        <!-- New Chat Button -->
+        <div class="p-4">
+            <button id="newChatBtn"
+                class="flex items-center gap-3 w-full px-4 py-3 bg-[var(--accent-color)] text-white hover:opacity-90 rounded-lg transition-all font-semibold shadow active:scale-95">
+                <i data-lucide="plus" width="18"></i>
+                New chat
+            </button>
+        </div>
+
+        <!-- History List -->
+        <div class="flex-1 overflow-y-auto px-2 space-y-1 min-h-0" id="sessionList">
+            <div class="px-3 py-2 text-xs font-semibold text-gray-500 uppercase tracking-wider">Recent</div>
+            <!-- Sessions injected here -->
+        </div>
+
+        <!-- User Profile & Model Select -->
+        <div class="p-4 border-t border-[var(--border-color)] bg-[var(--bg-sidebar)] mt-auto shrink-0 transition-all duration-300">
+            <div class="flex flex-col gap-2 px-2 py-2 mb-2 bg-[var(--border-color)]/20 rounded-lg p-3 select-none">
+                <div class="flex items-center justify-between gap-2 mb-1">
+                    <div class="flex items-center gap-2 truncate">
+                        <i data-lucide="user" width="16" class="text-gray-400 shrink-0"></i>
+                        <span class="text-sm font-medium truncate">{{ current_user.username or 'Guest' }}</span>
+                    </div>
+                    <!-- Sun/Moon Selector button -->
+                    <button id="themeToggleBtn" class="p-1 text-[var(--text-muted)] hover:text-[var(--text-main)] hover:bg-[var(--bg-sidebar-hover)] rounded transition-all" title="Toggle Light/Dark Theme">
+                        <i id="themeToggleIcon" data-lucide="moon" width="14"></i>
+                    </button>
+                </div>
+
+                {% if current_user.is_authenticated %}
+                {% if current_user.is_admin %}
+                <a href="{{ url_for('admin') }}"
+                    class="text-xs text-blue-400 hover:text-blue-300 flex items-center gap-1">
+                    <i data-lucide="shield" width="12"></i> Admin
+                </a>
+                {% endif %}
+                <a href="{{ url_for('logout') }}"
+                    class="text-xs text-red-400 hover:text-red-300 flex items-center gap-1">
+                    <i data-lucide="log-out" width="12"></i> Log out
+                </a>
+                {% else %}
+                <a href="{{ url_for('login') }}"
+                    class="text-xs text-blue-400 hover:text-blue-300 flex items-center gap-1">
+                    <i data-lucide="log-in" width="12"></i> Log in to Save History
+                </a>
+                {% endif %}
+            </div>
+
+            <a href="{{ url_for('index') }}" class="block mb-4 text-center text-xs text-gray-400 hover:text-white">Back
+                to Home</a>
+
+            <select id="modelSelect"
+                class="w-full bg-[var(--bg-app)] text-[var(--text-main)] border border-[var(--border-color)] rounded-lg px-3 py-2 text-sm outline-none focus:border-[var(--accent-color)] transition-colors">
+                <option value="gemma3:1b">Gemma 3 (1b)</option>
+                <option value="llama3">Llama 3</option>
+                <option value="mistral">Mistral</option>
+            </select>
+        </div>
+    </div>
+
+    <!-- Main Content -->
+    <div class="flex-1 flex flex-col h-full relative w-full bg-[var(--bg-app)] min-w-0 transition-all duration-300">
+
+        <!-- Top Navigation Header -->
+        <div class="h-11 border-b border-[var(--border-color)] bg-[var(--bg-card)] flex items-center justify-between px-6 z-30 shrink-0 select-none transition-all duration-300">
+            <div class="flex items-center gap-3">
+                <button id="mobileMenuBtn" class="p-1.5 -ml-1 text-neutral-600 hover:bg-gray-100 rounded-lg md:hidden">
+                    <i data-lucide="menu" width="18"></i>
+                </button>
+                
+                <div class="flex items-center gap-2">
+                    <span class="text-sm font-bold tracking-tight bg-gradient-to-r from-[var(--accent-color)] to-purple-500 bg-clip-text text-transparent">Privacy LLM</span>
+                    <span class="hidden md:inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[9px] font-semibold bg-emerald-500/10 text-emerald-500 border border-emerald-500/20">
+                        <span class="w-1 h-1 rounded-full bg-emerald-500 animate-pulse"></span>
+                        Secure Local AI
+                    </span>
+                </div>
+            </div>
+            
+            <div class="flex items-center gap-1.5">
+                <!-- Top header holds minimalist status/actions if needed -->
+            </div>
+        </div>
+
+        <!-- Chat Area -->
+        <div id="chatContainer" class="flex-1 overflow-y-auto scroll-smooth bg-[var(--bg-app)]">
+            <!-- Messages or Welcome Screen -->
+            <div id="welcomeScreen"
+                class="h-full flex flex-col items-center justify-center p-8 text-center animate-in fade-in duration-500 max-w-3xl mx-auto w-full select-none">
+                <div
+                    class="w-14 h-14 bg-black rounded-2xl flex items-center justify-center mb-5 shadow-lg rotate-3 hover:rotate-0 transition-transform duration-300 shrink-0">
+                    <i data-lucide="sparkles" width="28" class="text-white"></i>
+                </div>
+                <h1 class="text-2xl md:text-3xl font-bold mb-2 tracking-tight text-[var(--text-main)]">How can I help you today?</h1>
+                <p class="text-[var(--text-muted)] text-sm max-w-md mb-8 leading-relaxed">Ask a question, upload document files to vector-search and analyze, or try dictating with your voice.</p>
+                
+                <!-- Suggestions Prompt Card Grid -->
+                <div id="suggestionGrid" class="grid grid-cols-1 md:grid-cols-2 gap-3.5 w-full max-w-2xl px-4 hidden animate-in fade-in slide-in-from-bottom-2 duration-300">
+                    <!-- Cards will be dynamically loaded via JS based on selected Persona -->
+                </div>
+            </div>
+
+            <div id="messagesList" class="max-w-4xl mx-auto w-full px-4 pt-8 pb-8 space-y-6 hidden">
+                <!-- Messages injected here -->
+            </div>
+            <div id="bottomAnchor"></div>
+        </div>
+
+        <!-- Input Area -->
+        <div class="w-full bg-app-container border-t border-[var(--border-color)] pb-2 pt-1.5 px-4 z-20 shrink-0 transition-all duration-300">
+            <div class="max-w-3xl mx-auto w-full relative">
+
+                <!-- Attachments Preview -->
+                <div id="attachmentsPreview" class="flex gap-2 mb-2 overflow-x-auto pb-1 scrollbar-hide hidden">
+                </div>
+
+                <div id="inputWrapper"
+                    class="relative flex flex-col w-full border border-[var(--border-color)] bg-[var(--bg-card)] rounded-[20px] transition-all p-1.5 px-3">
+
+                    <input type="file" id="fileInput" multiple class="hidden">
+
+                    <textarea id="promptInput" rows="1" placeholder="Message Privacy LLM..."
+                        class="w-full resize-none border-0 bg-transparent py-1.5 px-2 focus:outline-none max-h-[90px] text-base placeholder-gray-500"
+                        style="min-height: 10px;"></textarea>
+
+                    <div class="flex items-center justify-between px-2 pb-1 mt-1 flex-wrap gap-2">
+                        <div class="flex items-center gap-1.5 flex-wrap">
+                            <button id="attachBtn"
+                                class="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-200/50 rounded-full transition-colors"
+                                title="Attach files">
+                                <i data-lucide="paperclip" width="16"></i>
+                            </button>
+                            <button id="imageModeBtn"
+                                class="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-200/50 rounded-full transition-colors flex items-center gap-2"
+                                title="Create Image">
+                                <i data-lucide="image" width="16"></i>
+                                <span id="imageModeText" class="text-xs font-semibold pr-1 hidden">Image Mode</span>
+                            </button>
+                            
+                            <!-- Voice STT Dictation -->
+                            <button id="voiceBtn"
+                                class="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-200/50 rounded-full transition-colors flex items-center justify-center relative"
+                                title="Voice Input (STT)">
+                                <i data-lucide="mic" width="16"></i>
+                                <span id="voicePulse" class="absolute inset-0 rounded-full bg-red-500/20 animate-ping hidden"></span>
+                            </button>
+
+                            <!-- Vertical Divider -->
+                            <div class="h-4 w-[1px] bg-[var(--border-color)] mx-1 self-center"></div>
+
+                            <!-- Persona Dropdown -->
+                            <div class="relative">
+                                <button id="personaSelectorBtn" class="flex items-center gap-1.5 px-2.5 py-1.5 bg-[var(--bg-card)] border border-[var(--border-color)] text-[var(--text-main)] hover:bg-[var(--bg-sidebar-hover)] rounded-full text-xs font-semibold transition-all active:scale-95">
+                                    <i id="activePersonaIcon" data-lucide="sparkles" width="13" class="text-[var(--accent-color)]"></i>
+                                    <span id="activePersonaName">General Assistant</span>
+                                    <i data-lucide="chevron-down" width="10" class="text-[var(--text-muted)]"></i>
+                                </button>
+                                
+                                <!-- Persona Selector Menu -->
+                                <div id="personaDropdown" class="absolute bottom-full left-0 mb-2 w-64 rounded-xl shadow-xl p-2 hidden z-50 animate-in fade-in slide-in-from-bottom-1 duration-150">
+                                    <div class="px-2 py-1.5 text-[10px] font-bold text-[var(--text-muted)] uppercase tracking-wider">Choose Assistant Persona</div>
+                                    <div id="personasContainer" class="max-h-56 overflow-y-auto space-y-0.5 scrollbar-hide">
+                                        <!-- Injected dynamically -->
+                                    </div>
+                                    <div class="border-t border-[var(--border-color)] mt-1 pt-1">
+                                        <button id="createPersonaBtn" class="w-full flex items-center gap-2 px-2.5 py-2 text-xs font-semibold text-[var(--accent-color)] hover:bg-[var(--accent-soft)] rounded-lg text-left transition-colors">
+                                            <i data-lucide="plus" width="14"></i>
+                                            Create Custom Persona
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- RAG Library Button -->
+                            <div class="relative">
+                                <button id="ragWorkspaceBtn" class="p-2 text-[var(--text-muted)] hover:text-[var(--text-main)] hover:bg-[var(--bg-sidebar-hover)] rounded-lg relative transition-all active:scale-90" title="RAG Document Workspace">
+                                    <i data-lucide="library" width="16"></i>
+                                    <span id="ragFilesCount" class="absolute top-1.5 right-1.5 bg-[var(--accent-color)] text-white rounded-full text-[9px] w-4 h-4 flex items-center justify-center font-bold hidden">0</span>
+                                </button>
+                                
+                                <!-- RAG Panel -->
+                                <div id="ragWorkspacePanel" class="absolute bottom-full left-0 mb-2 w-80 rounded-xl shadow-xl p-4 hidden z-50 animate-in fade-in slide-in-from-bottom-1 duration-150">
+                                    <h3 class="text-xs font-bold text-[var(--text-main)] mb-1">Local RAG Workspace</h3>
+                                    <p class="text-[10px] text-[var(--text-muted)] mb-3 leading-relaxed">Upload documents to chat with them. Files will be parsed and embedded completely offline.</p>
+                                    
+                                    <!-- Upload Drag Area -->
+                                    <div id="ragDropArea" class="border border-dashed border-[var(--border-color)] bg-[var(--bg-app)] rounded-xl p-4 text-center hover:border-[var(--accent-color)] hover:bg-[var(--accent-soft)] cursor-pointer transition-all">
+                                        <i data-lucide="upload-cloud" width="22" class="mx-auto text-gray-400 mb-1"></i>
+                                        <div class="text-xs font-semibold text-neutral-700">Drag & drop document or <span class="text-blue-600">browse</span></div>
+                                        <div class="text-[9px] text-gray-400 mt-0.5">PDF, DOCX, CSV, TXT</div>
+                                        <input type="file" id="ragFileInput" accept=".pdf,.docx,.doc,.csv,.txt" class="hidden">
+                                    </div>
+                                    
+                                    <!-- Files List -->
+                                    <div id="ragFilesList" class="space-y-1 mt-3 max-h-36 overflow-y-auto scrollbar-hide">
+                                        <!-- Injected dynamically -->
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <!-- Export Dropdown -->
+                            <div class="relative">
+                                <button id="exportBtn" class="p-2 text-[var(--text-muted)] hover:text-[var(--text-main)] hover:bg-[var(--bg-sidebar-hover)] rounded-lg transition-all active:scale-90" title="Export Conversation">
+                                    <i data-lucide="download" width="16"></i>
+                                </button>
+                                
+                                <div id="exportDropdown" class="absolute bottom-full left-0 mb-2 w-52 rounded-xl shadow-xl p-1.5 hidden z-50 animate-in fade-in slide-in-from-bottom-1 duration-150">
+                                    <div class="px-2.5 py-1.5 text-[10px] font-bold text-[var(--text-muted)] uppercase tracking-wider">Export Chat</div>
+                                    <button id="exportMarkdownBtn" class="export-option-btn" disabled>
+                                        <i data-lucide="file-text" width="15" class="text-blue-500"></i>
+                                        <div>
+                                            <div class="font-semibold">Markdown (.md)</div>
+                                            <div class="text-[10px] text-[var(--text-muted)]">Plain text with formatting</div>
+                                        </div>
+                                    </button>
+                                    <button id="exportPdfBtn" class="export-option-btn" disabled>
+                                        <i data-lucide="file" width="15" class="text-red-500"></i>
+                                        <div>
+                                            <div class="font-semibold">PDF Document</div>
+                                            <div class="text-[10px] text-[var(--text-muted)]">Formatted printable file</div>
+                                        </div>
+                                    </button>
+                                </div>
+                            </div>
+                            
+                            <!-- LLM Settings Trigger -->
+                            <button id="slidersToggleBtn" class="p-2 text-[var(--text-muted)] hover:text-[var(--text-main)] hover:bg-[var(--bg-sidebar-hover)] rounded-lg transition-all active:scale-90" title="Model Parameters Setting">
+                                <i data-lucide="sliders" width="16"></i>
+                            </button>
+                        </div>
+                        <button id="sendBtn"
+                            class="p-2 rounded-full transition-all duration-200 bg-gray-200 text-gray-400 cursor-not-allowed self-end mb-0.5"
+                            disabled>
+                            <i data-lucide="send" width="16"></i>
+                        </button>
+                    </div>
+                </div>
+                <div class="text-center text-[10px] text-gray-400 mt-1.5 font-medium">
+                    Privacy LLM runs entirely offline. All datasets stay safe on your machine.
+                </div>
+            </div>
+        </div>
+
+        <!-- Hyperparameter Settings Drawer -->
+        <div id="slidersDrawer" class="fixed inset-y-0 right-0 z-50 w-80 border-l border-[var(--border-color)] shadow-2xl transform translate-x-full transition-transform duration-300 ease-in-out flex flex-col select-none transition-all duration-300">
+            <div class="p-4 border-b border-[var(--border-color)] flex items-center justify-between bg-[var(--bg-sidebar)]/30">
+                <div class="flex items-center gap-2">
+                    <i data-lucide="sliders" width="16" class="text-[var(--text-main)] opacity-80"></i>
+                    <span class="font-bold text-sm text-[var(--text-main)]">Parameters Settings</span>
+                </div>
+                <button id="closeSlidersBtn" class="p-1 text-[var(--text-muted)] hover:text-[var(--text-main)] rounded-lg">
+                    <i data-lucide="x" width="16"></i>
+                </button>
+            </div>
+            
+            <div class="flex-1 overflow-y-auto p-5 space-y-5">
+                <!-- Temperature -->
+                <div class="space-y-1.5">
+                    <div class="flex items-center justify-between">
+                        <label class="text-xs font-semibold text-[var(--text-main)] opacity-80 flex items-center gap-1">
+                            Temperature
+                            <i data-lucide="help-circle" width="12" class="text-[var(--text-muted)] cursor-help" title="Controls response creativity. Higher = creative/random; Lower = focused/deterministic."></i>
+                        </label>
+                        <span id="tempValue" class="text-xs font-bold text-[var(--text-main)] bg-[var(--border-color)] px-1.5 py-0.5 rounded">0.7</span>
+                    </div>
+                    <input type="range" id="tempSlider" min="0.0" max="2.0" step="0.1" value="0.7" class="w-full h-1 bg-[var(--border-color)] rounded-lg appearance-none cursor-pointer accent-[var(--accent-color)]">
+                </div>
+                
+                <!-- Max Tokens -->
+                <div class="space-y-1.5">
+                    <div class="flex items-center justify-between">
+                        <label class="text-xs font-semibold text-[var(--text-main)] opacity-80 flex items-center gap-1">
+                            Max Tokens
+                            <i data-lucide="help-circle" width="12" class="text-[var(--text-muted)] cursor-help" title="Maximum length of response in tokens."></i>
+                        </label>
+                        <span id="tokensValue" class="text-xs font-bold text-[var(--text-main)] bg-[var(--border-color)] px-1.5 py-0.5 rounded">2048</span>
+                    </div>
+                    <input type="range" id="tokensSlider" min="64" max="4096" step="64" value="2048" class="w-full h-1 bg-[var(--border-color)] rounded-lg appearance-none cursor-pointer accent-[var(--accent-color)]">
+                </div>
+                
+                <!-- Top P -->
+                <div class="space-y-1.5">
+                    <div class="flex items-center justify-between">
+                        <label class="text-xs font-semibold text-[var(--text-main)] opacity-80 flex items-center gap-1">
+                            Top P (Nucleus)
+                            <i data-lucide="help-circle" width="12" class="text-[var(--text-muted)] cursor-help" title="Diversity regulator. Higher filters out less likely words."></i>
+                        </label>
+                        <span id="topPValue" class="text-xs font-bold text-[var(--text-main)] bg-[var(--border-color)] px-1.5 py-0.5 rounded">0.90</span>
+                    </div>
+                    <input type="range" id="topPSlider" min="0.0" max="1.0" step="0.05" value="0.9" class="w-full h-1 bg-[var(--border-color)] rounded-lg appearance-none cursor-pointer accent-[var(--accent-color)]">
+                </div>
+                
+                <!-- Top K -->
+                <div class="space-y-1.5">
+                    <div class="flex items-center justify-between">
+                        <label class="text-xs font-semibold text-[var(--text-main)] opacity-80 flex items-center gap-1">
+                            Top K
+                            <i data-lucide="help-circle" width="12" class="text-[var(--text-muted)] cursor-help" title="Limits vocabulary selection pool to Top K probable words."></i>
+                        </label>
+                        <span id="topKValue" class="text-xs font-bold text-[var(--text-main)] bg-[var(--border-color)] px-1.5 py-0.5 rounded">40</span>
+                    </div>
+                    <input type="range" id="topKSlider" min="1" max="100" step="1" value="40" class="w-full h-1 bg-[var(--border-color)] rounded-lg appearance-none cursor-pointer accent-[var(--accent-color)]">
+                </div>
+                
+                <!-- Repeat Penalty -->
+                <div class="space-y-1.5">
+                    <div class="flex items-center justify-between">
+                        <label class="text-xs font-semibold text-[var(--text-main)] opacity-80 flex items-center gap-1">
+                            Repeat Penalty
+                            <i data-lucide="help-circle" width="12" class="text-[var(--text-muted)] cursor-help" title="Controls repetition frequency. Higher strongly blocks matching vocab duplication."></i>
+                        </label>
+                        <span id="penaltyValue" class="text-xs font-bold text-[var(--text-main)] bg-[var(--border-color)] px-1.5 py-0.5 rounded">1.1</span>
+                    </div>
+                    <input type="range" id="penaltySlider" min="0.5" max="2.0" step="0.1" value="1.1" class="w-full h-1 bg-[var(--border-color)] rounded-lg appearance-none cursor-pointer accent-[var(--accent-color)]">
+                </div>
+            </div>
+            
+            <div class="p-4 border-t border-[var(--border-color)] bg-[var(--bg-sidebar)]/30 flex gap-2">
+                <button id="resetSlidersBtn" class="flex-1 py-2 text-xs font-semibold bg-[var(--bg-card)] border border-[var(--border-color)] rounded-lg hover:bg-[var(--bg-sidebar-hover)] text-[var(--text-main)] transition-all active:scale-95">
+                    Reset Defaults
+                </button>
+            </div>
+        </div>
+
+        <!-- Custom Persona Creator Modal -->
+        <div id="personaModal" class="fixed inset-0 z-50 flex items-center justify-center hidden select-none">
+            <div id="personaModalBackdrop" class="absolute inset-0 bg-black/45 backdrop-blur-sm"></div>
+            <div class="relative border border-[var(--border-color)] shadow-2xl rounded-2xl w-full max-w-sm p-6 animate-in zoom-in-95 duration-200 z-10">
+                <div class="flex items-center justify-between mb-4">
+                    <h3 class="text-sm font-bold text-[var(--text-main)]">Create Custom Persona</h3>
+                    <button id="closePersonaModalBtn" class="p-1 text-[var(--text-muted)] hover:text-[var(--text-main)] rounded-lg">
+                        <i data-lucide="x" width="16"></i>
+                    </button>
+                </div>
+                
+                <div class="space-y-3.5">
+                    <div>
+                        <label class="block text-[10px] font-bold text-[var(--text-muted)] mb-1">Persona Name</label>
+                        <input type="text" id="personaNameInput" placeholder="e.g. Expert Coder" class="w-full custom-modal-input rounded-xl px-3 py-2 text-xs outline-none transition-colors">
+                    </div>
+                    
+                    <div>
+                        <label class="block text-[10px] font-bold text-[var(--text-muted)] mb-1">System Instructions</label>
+                        <textarea id="personaPromptInput" rows="4" placeholder="Define the AI agent's instructions, tone, and constraints..." class="w-full custom-modal-textarea rounded-xl px-3 py-2 text-xs outline-none transition-colors resize-none"></textarea>
+                    </div>
+                    
+                    <div>
+                        <label class="block text-[10px] font-bold text-[var(--text-muted)] mb-1.5">Icon Style</label>
+                        <div class="grid grid-cols-5 gap-2" id="personaIconGrid">
+                            <button class="icon-option p-2 bg-[var(--bg-app)] border border-[var(--border-color)] rounded-lg flex justify-center hover:bg-[var(--bg-sidebar-hover)] transition-all active:scale-90 active" data-icon="sparkles">
+                                <i data-lucide="sparkles" width="16" class="text-purple-500"></i>
+                            </button>
+                            <button class="icon-option p-2 bg-[var(--bg-app)] border border-transparent rounded-lg flex justify-center hover:bg-[var(--bg-sidebar-hover)] transition-all active:scale-90" data-icon="code">
+                                <i data-lucide="code" width="16" class="text-blue-500"></i>
+                            </button>
+                            <button class="icon-option p-2 bg-[var(--bg-app)] border border-transparent rounded-lg flex justify-center hover:bg-[var(--bg-sidebar-hover)] transition-all active:scale-90" data-icon="pen-tool">
+                                <i data-lucide="pen-tool" width="16" class="text-orange-500"></i>
+                            </button>
+                            <button class="icon-option p-2 bg-[var(--bg-app)] border border-transparent rounded-lg flex justify-center hover:bg-[var(--bg-sidebar-hover)] transition-all active:scale-90" data-icon="microscope">
+                                <i data-lucide="microscope" width="16" class="text-green-500"></i>
+                            </button>
+                            <button class="icon-option p-2 bg-[var(--bg-app)] border border-transparent rounded-lg flex justify-center hover:bg-[var(--bg-sidebar-hover)] transition-all active:scale-90" data-icon="book-open">
+                                <i data-lucide="book-open" width="16" class="text-red-500"></i>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="mt-5 flex gap-2">
+                    <button id="cancelPersonaBtn" class="flex-1 py-2 text-xs font-semibold border border-[var(--border-color)] hover:bg-[var(--bg-sidebar-hover)] rounded-xl text-[var(--text-main)] transition-all active:scale-95">Cancel</button>
+                    <button id="savePersonaBtn" class="flex-1 py-2 text-xs font-semibold bg-[var(--accent-color)] text-white hover:opacity-90 rounded-xl transition-all active:scale-95">Save Persona</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Overlay for Mobile -->
+        <div id="mobileOverlay" class="fixed inset-0 bg-black/50 z-40 md:hidden backdrop-blur-sm hidden"></div>
+    </div>
+    </div>
+
+    <script src="{{ url_for('static', filename='script.js') }}"></script>
+    <script>
+        lucide.createIcons();
+    </script>
+</body>
+
+</html>
